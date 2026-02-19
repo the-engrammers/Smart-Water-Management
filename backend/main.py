@@ -3,6 +3,16 @@ from fastapi import FastAPI
 
 # Import BaseModel from Pydantic to define and validate the data structure
 from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+
+try:
+    from backend.alert_service import send_discord_alert
+except ImportError:
+    from alert_service import send_discord_alert
+
+
+LEAK_FLOW_RATE_THRESHOLD = 40.0
 
 
 # Create an instance of FastAPI
@@ -17,6 +27,7 @@ class SensorData(BaseModel):
     timestamp: str      # Time when the data was recorded
     water_level: float  # Current water level measured by the sensor
     flow_rate: float    # Current water flow rate measured by the sensor
+    status: Optional[str] = None
 
 
 # Health check endpoint
@@ -37,5 +48,19 @@ def ingest(data: SensorData):
     # Print the received data to the console (for debugging and monitoring)
     print(data)
 
+    leak_by_status = (data.status or "").strip().lower() == "leak"
+    leak_by_flow = data.flow_rate >= LEAK_FLOW_RATE_THRESHOLD
+    leak_detected = leak_by_status or leak_by_flow
+    alert_sent = False
+
+    if leak_detected:
+        alert_payload = {
+            "device_id": data.device_id,
+            "flow_rate": data.flow_rate,
+            "status": "Leak",
+            "timestamp": data.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        alert_sent = send_discord_alert(alert_payload)
+
     # Return a confirmation response to the sender
-    return {"message": "Data received"}
+    return {"message": "Data received", "alert_sent": alert_sent, "leak_detected": leak_detected}
