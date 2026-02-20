@@ -1,79 +1,87 @@
-import requests
+from __future__ import annotations
+
 import csv
+import datetime as dt
+import json
+from pathlib import Path
 import os
-from datetime import datetime
+import urllib.error
+import urllib.request
 
-# --- CONFIGURATION ---
+STATUS = "Leak"
+DEVICE_ID = "SN-MEKNES-001"
+FLOW_RATE = 7.25
+ROOT_DIR = Path(__file__).resolve().parent.parent
+LOG_FILE = ROOT_DIR / "frontend" / "alert_logs.csv"
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
-LOG_FILE = "alert_logs.csv"
 
-# --- LOGGING FUNCTION ---
-def log_alert_to_csv(data):
-    """
-    Saves the alert details into a CSV file for history tracking.
-    """
-    file_exists = os.path.isfile(LOG_FILE)
 
-    # Open file in append mode
-    with open(LOG_FILE, mode='a', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=["timestamp", "device_id", "flow_rate", "status"])
+def send_discord_alert(payload: dict) -> None:
+    if not DISCORD_WEBHOOK_URL:
+        print("[INFO] DISCORD_WEBHOOK_URL not set. Skipping Discord send.")
+        return
 
-        # Write header only if the file is new
+    message = {
+        "content": (
+            f"🚨 Leak Alert\n"
+            f"Device: {payload['device_id']}\n"
+            f"Flow Rate: {payload['flow_rate']} L/min\n"
+            f"Timestamp: {payload['timestamp']}"
+        )
+    }
+
+    request = urllib.request.Request(
+        DISCORD_WEBHOOK_URL,
+        data=json.dumps(message).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            if 200 <= response.status < 300:
+                print("[OK] Discord alert sent.")
+            else:
+                print(f"[WARN] Discord returned status {response.status}.")
+    except (urllib.error.URLError, urllib.error.HTTPError) as error:
+        print(f"[WARN] Discord send failed: {error}")
+
+
+def append_to_log(payload: dict) -> None:
+    file_exists = LOG_FILE.exists()
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with LOG_FILE.open("a", newline="", encoding="utf-8") as file_handle:
+        writer = csv.DictWriter(
+            file_handle,
+            fieldnames=["timestamp", "device_id", "flow_rate", "status"],
+        )
+
         if not file_exists:
             writer.writeheader()
 
-        writer.writerow({
-            "timestamp": data["timestamp"],
-            "device_id": data["device_id"],
-            "flow_rate": data["flow_rate"],
-            "status": data["status"]
-        })
-    print(f"Alert logged successfully to {LOG_FILE}")
+        writer.writerow(payload)
 
-# --- DISCORD ALERT FUNCTION ---
-def send_discord_alert(data):
-    """
-    Sends a formatted alert message to Discord.
-    """
-    if not DISCORD_WEBHOOK_URL:
-        print("DISCORD_WEBHOOK_URL is not set. Alert not sent.")
-        return False
+    print(f"[OK] Logged leak to {LOG_FILE}")
 
+
+def main() -> None:
     payload = {
-        "username": "Water Guard Bot",
-        "embeds": [{
-            "title": "🚨 CRITICAL ALERT: LEAK DETECTED 🚨",
-            "color": 16711680,
-            "fields": [
-                {"name": "Device ID", "value": data["device_id"], "inline": True},
-                {"name": "Flow Rate", "value": f"{data['flow_rate']} L/min", "inline": True},
-                {"name": "Timestamp", "value": data["timestamp"], "inline": False}
-            ]
-        }]
+        "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
+        "device_id": DEVICE_ID,
+        "flow_rate": FLOW_RATE,
+        "status": STATUS,
     }
-    try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
-        if response.status_code == 204:
-            print("Alert sent to Discord!")
-            # Once sent to discord, log it for history
-            log_alert_to_csv(data)
-            return True
-        else:
-            print(f"Failed to send alert. Status: {response.status_code}")
-            return False
-    except Exception as e:
-        print(f"Error: {e}")
-        return False
 
-# --- EXECUTION ---
+    if payload["status"] != "Leak":
+        print("[INFO] Status is not 'Leak'. No alert/log action taken.")
+        return
+
+    send_discord_alert(payload)
+    append_to_log(payload)
+    print("\a", end="")
+    print("[OK] Notification triggered.")
+
+
 if __name__ == "__main__":
-    # Test data
-    test_data = {
-        "device_id": "SN-MEKNES-001",
-        "flow_rate": 45.2,
-        "status": "Leak",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-    if test_data["status"] == "Leak":
-        send_discord_alert(test_data)
+    main()

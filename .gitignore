@@ -1,5 +1,7 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 .venv/
 alert_logs.csv
+frontend/alert_logs.csv
