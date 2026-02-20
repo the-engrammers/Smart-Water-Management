@@ -13,7 +13,7 @@ DEVICE_ID = "SN-MEKNES-001"
 FLOW_RATE = 7.25
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE = ROOT_DIR / "frontend" / "alert_logs.csv"
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "https://discordapp.com/api/webhooks/1474427883173707938/mChuz3klUQpeh869O_BVNdxaXn5BIYxxymPtdWARYe8bOY0rwiuaj8WAbBPs-dpd6oRZ")
 
 
 def send_discord_alert(payload: dict) -> None:
