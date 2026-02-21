@@ -1,4 +1,5 @@
-# AT the END execute in Terminal space "VS CODE" this --> streamlit run app.py  
+# AT the END execute in Terminal space "VS CODE" this --> streamlit run app.py 
+## To see the website.
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -82,11 +83,20 @@ CROP_THRESHOLDS = {
 LOG_FILE = "alert_logs.csv"
 
 def load_data():
+    """Load sensor data from CSV, handling optional columns gracefully"""
+    default_columns = ["timestamp", "device_id", "flow_rate", "status", "water_level", "temperature"]
+    
     if os.path.exists(LOG_FILE):
         df = pd.read_csv(LOG_FILE)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # Ensure all expected columns exist, fill missing ones with NaN
+        for col in default_columns:
+            if col not in df.columns:
+                df[col] = None
+        
         return df
-    return pd.DataFrame(columns=["timestamp", "device_id", "flow_rate", "status"])
+    return pd.DataFrame(columns=default_columns)
 
 # 5. AI Decision Logic
 def get_ai_recommendation(df, crop_type):
@@ -95,30 +105,66 @@ def get_ai_recommendation(df, crop_type):
         # Simulate sensor data if no real data available
         soil_moisture = np.random.uniform(20, 35)
         flow_rate = np.random.uniform(0, 5)
+        water_level = np.random.uniform(5, 15)  # meters depth
+        temperature = np.random.uniform(18, 32)  # Celsius
     else:
-        # Estimate soil moisture from water level (simulated conversion)
         latest = df.iloc[-1]
-        # Simulate soil moisture: lower flow_rate = lower moisture
-        soil_moisture = max(15, 50 - (latest['flow_rate'] * 2))
-        flow_rate = latest['flow_rate']
+        flow_rate = latest.get('flow_rate', 0) if pd.notna(latest.get('flow_rate')) else 0
+        
+        # Use water_level if available, otherwise estimate from flow_rate
+        if 'water_level' in latest and pd.notna(latest.get('water_level')):
+            water_level = latest['water_level']
+            # Convert water level (depth in meters) to soil moisture estimate
+            # Deeper water = lower soil moisture (inverse relationship)
+            soil_moisture = max(15, min(50, 50 - (water_level * 2)))
+        else:
+            # Fallback: estimate soil moisture from flow_rate
+            soil_moisture = max(15, 50 - (flow_rate * 2))
+            water_level = None
+        
+        # Get temperature if available
+        temperature = latest.get('temperature') if 'temperature' in latest and pd.notna(latest.get('temperature')) else None
     
     thresholds = CROP_THRESHOLDS[crop_type]
+    
+    # Enhanced reasoning with temperature and water level
+    reasons = []
     
     if soil_moisture < thresholds["soil_moisture_min"]:
         action = "Start Irrigation"
         volume = thresholds["optimal_volume"]
-        reason = f"Soil moisture ({soil_moisture:.1f}%) below threshold ({thresholds['soil_moisture_min']}%)"
+        reasons.append(f"Soil moisture ({soil_moisture:.1f}%) below threshold ({thresholds['soil_moisture_min']}%)")
         urgency = "HIGH"
     elif soil_moisture < thresholds["soil_moisture_min"] + 5:
         action = "Monitor Closely"
         volume = thresholds["optimal_volume"] * 0.7
-        reason = f"Soil moisture ({soil_moisture:.1f}%) approaching threshold"
+        reasons.append(f"Soil moisture ({soil_moisture:.1f}%) approaching threshold")
         urgency = "MEDIUM"
     else:
         action = "No Action Needed"
         volume = 0
-        reason = f"Soil moisture ({soil_moisture:.1f}%) is optimal for {crop_type}"
+        reasons.append(f"Soil moisture ({soil_moisture:.1f}%) is optimal for {crop_type}")
         urgency = "LOW"
+    
+    # Add temperature-based reasoning
+    if temperature is not None:
+        if temperature > 30:
+            reasons.append(f"High temperature ({temperature:.1f}°C) increases water needs")
+            if urgency == "LOW":
+                urgency = "MEDIUM"
+                if volume == 0:
+                    volume = thresholds["optimal_volume"] * 0.5
+        elif temperature < 15:
+            reasons.append(f"Low temperature ({temperature:.1f}°C) reduces water needs")
+    
+    # Add water level context
+    if water_level is not None:
+        if water_level > 10:
+            reasons.append(f"Deep groundwater ({water_level:.1f}m) - irrigation may be needed")
+        elif water_level < 3:
+            reasons.append(f"Shallow groundwater ({water_level:.1f}m) - good water availability")
+    
+    reason = " | ".join(reasons)
     
     return {
         "action": action,
@@ -126,7 +172,9 @@ def get_ai_recommendation(df, crop_type):
         "reason": reason,
         "urgency": urgency,
         "soil_moisture": soil_moisture,
-        "flow_rate": flow_rate
+        "flow_rate": flow_rate,
+        "water_level": water_level,
+        "temperature": temperature
     }
 
 # 6. Calculate Efficiency Score
@@ -208,8 +256,10 @@ st.markdown(f"""
             <strong>Reason:</strong> {recommendation['reason']}
         </p>
         <p style="font-size: 12px; color: #888888; margin-top: 10px;">
-            Current Soil Moisture: {recommendation['soil_moisture']:.1f}% | 
+            Soil Moisture: {recommendation['soil_moisture']:.1f}% | 
             Flow Rate: {recommendation['flow_rate']:.2f} L/min
+            {f" | Water Level: {recommendation['water_level']:.1f}m" if recommendation.get('water_level') is not None else ""}
+            {f" | Temperature: {recommendation['temperature']:.1f}°C" if recommendation.get('temperature') is not None else ""}
         </p>
     </div>
 """, unsafe_allow_html=True)
@@ -269,19 +319,65 @@ with col4:
     irrigation_count = len(st.session_state.irrigation_history)
     st.metric("Irrigations", irrigation_count, delta="Today")
 
-# 13. Top Metrics (Real Data)
-st.markdown("### 📈 System Metrics")
+# 13. Current Sensor Metrics
+st.markdown("### 📊 Current Sensor Readings")
+if not df.empty:
+    latest = df.iloc[-1]
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        current_flow = latest.get('flow_rate', 0) if pd.notna(latest.get('flow_rate')) else 0
+        st.metric("Flow Rate", f"{current_flow:.2f} L/min")
+    
+    with col2:
+        if 'temperature' in latest and pd.notna(latest.get('temperature')):
+            current_temp = latest['temperature']
+            st.metric("Temperature", f"{current_temp:.1f}°C")
+        else:
+            st.metric("Temperature", "N/A", delta="No data")
+    
+    with col3:
+        if 'water_level' in latest and pd.notna(latest.get('water_level')):
+            current_water_level = latest['water_level']
+            # Water level is depth, so higher depth = lower availability
+            depth_status = "Good" if current_water_level < 5 else "Deep"
+            st.metric("Water Level (Depth)", f"{current_water_level:.2f}m", delta=depth_status)
+        else:
+            st.metric("Water Level (Depth)", "N/A", delta="No data")
+    
+    with col4:
+        status = "CRITICAL" if len(df[df['status'] == 'Leak']) > 0 else "NOMINAL"
+        st.metric("System Health", status)
+else:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Flow Rate", "N/A", delta="Waiting for data")
+    with col2:
+        st.metric("Temperature", "N/A", delta="Waiting for data")
+    with col3:
+        st.metric("Water Level (Depth)", "N/A", delta="Waiting for data")
+    with col4:
+        st.metric("System Health", "NOMINAL")
+
+# 14. Historical Metrics
+st.markdown("### 📈 Historical Metrics")
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Total Alerts Logged", len(df))
+    st.metric("Total Readings", len(df))
 with col2:
-    avg_flow = round(df['flow_rate'].mean(), 2) if not df.empty else 0
-    st.metric("Avg Flow Rate", f"{avg_flow} L/min")
+    avg_flow = round(df['flow_rate'].mean(), 2) if not df.empty and 'flow_rate' in df.columns else 0
+    st.metric("Avg Flow Rate", f"{avg_flow} L/min" if avg_flow > 0 else "N/A")
 with col3:
-    status = "CRITICAL" if len(df) > 0 else "NOMINAL"
-    st.metric("System Health", status)
+    if not df.empty and 'temperature' in df.columns:
+        avg_temp = df['temperature'].mean()
+        if pd.notna(avg_temp):
+            st.metric("Avg Temperature", f"{avg_temp:.1f}°C")
+        else:
+            st.metric("Avg Temperature", "N/A")
+    else:
+        st.metric("Avg Temperature", "N/A")
 
-# 14. Irrigation History & Data Visualization
+# 15. Irrigation History & Data Visualization
 st.markdown("### 📋 Irrigation History")
 if st.session_state.irrigation_history:
     history_df = pd.DataFrame(st.session_state.irrigation_history)
@@ -293,13 +389,38 @@ if st.session_state.irrigation_history:
 else:
     st.info("No irrigation events recorded yet. Start the pump to begin tracking.")
 
-# 15. Map & Charts
+# 16. Map & Charts
 left_col, right_col = st.columns([2, 1])
 
 with left_col:
-    st.subheader("🚨 Leak History (Real-time Log)")
+    st.subheader("📋 Sensor Data History (Real-time Log)")
     if not df.empty:
-        st.dataframe(df.sort_values(by='timestamp', ascending=False), use_container_width=True)
+        # Select and order columns for display
+        display_columns = ['timestamp', 'device_id', 'flow_rate']
+        
+        # Add optional columns if they exist and have data
+        if 'temperature' in df.columns:
+            display_columns.append('temperature')
+        if 'water_level' in df.columns:
+            display_columns.append('water_level')
+        if 'status' in df.columns:
+            display_columns.append('status')
+        
+        # Filter to only columns that exist in dataframe
+        display_columns = [col for col in display_columns if col in df.columns]
+        
+        # Format the dataframe for better display
+        display_df = df[display_columns].sort_values(by='timestamp', ascending=False).copy()
+        
+        # Format numeric columns for better readability
+        if 'flow_rate' in display_df.columns:
+            display_df['flow_rate'] = display_df['flow_rate'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+        if 'temperature' in display_df.columns:
+            display_df['temperature'] = display_df['temperature'].apply(lambda x: f"{x:.1f}°C" if pd.notna(x) else "N/A")
+        if 'water_level' in display_df.columns:
+            display_df['water_level'] = display_df['water_level'].apply(lambda x: f"{x:.2f}m" if pd.notna(x) else "N/A")
+        
+        st.dataframe(display_df, use_container_width=True)
     else:
         st.info("No sensor data available. Waiting for sensor readings...")
 
@@ -314,9 +435,9 @@ with right_col:
     })
     st.map(map_points)
 
-# 16. Water savings are calculated when pump starts (handled in button click handler above)
+# 17. Water savings are calculated when pump starts (handled in button click handler above)
 
-# 17. Real-time Auto-refresh
+# 18. Real-time Auto-refresh
 if auto_refresh:
     time.sleep(10)
     st.rerun()
