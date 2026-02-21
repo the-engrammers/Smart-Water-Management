@@ -26,6 +26,7 @@ class SensorData(BaseModel):
     device_id: str      # Unique identifier of the sensor device
     timestamp: str      # Time when the data was recorded
     water_level: float  # Current water level measured by the sensor
+    temperature: float  # Current temperature near the sensor
     flow_rate: float    # Current water flow rate measured by the sensor
     status: Optional[str] = None
 
@@ -57,6 +58,8 @@ def ingest(data: SensorData):
         alert_payload = {
             "device_id": data.device_id,
             "flow_rate": data.flow_rate,
+            "water_level": data.water_level,
+            "temperature": data.temperature,
             "status": "Leak",
             "timestamp": data.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }

@@ -27,7 +27,7 @@ def load_data():
         df = pd.read_csv(LOG_FILE)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         return df
-    return pd.DataFrame(columns=["timestamp", "device_id", "flow_rate", "status"])
+    return pd.DataFrame(columns=["timestamp", "device_id", "flow_rate", "water_level", "temperature", "status"])
 
 # 3. Sidebar Filters
 with st.sidebar:
