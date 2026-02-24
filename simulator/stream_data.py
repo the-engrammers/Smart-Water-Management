@@ -3,10 +3,13 @@ import requests
 import time
 import random
 import numpy as np
+import os
+from pathlib import Path
 
 # Updated API_URL to match FastAPI port
-API_URL = "http://localhost:8000/ingest" 
-CSV_PATH = "data/Aquifer_Petrignano.csv" 
+API_URL = os.getenv("API_URL", "http://localhost:8000/ingest")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CSV_PATH = PROJECT_ROOT / "data" / "Aquifer_Petrignano.csv"
 
 def start_sensor():
     print(" Updated Virtual Sensor Started...")
@@ -29,6 +32,7 @@ def start_sensor():
                 "flow_rate": abs(float(flow)), 
                 "water_level": abs(float(level)), # Renamed from pressure
                 "temperature": float(temp), # New field
+                "status": "Leak" if abs(float(flow)) >= 40 else "Normal",
                 "timestamp": pd.Timestamp.now().isoformat()
             }
 

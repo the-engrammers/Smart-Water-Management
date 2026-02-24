@@ -24,7 +24,7 @@ app = FastAPI()
 # This ensures the incoming JSON has the correct structure and types
 class SensorData(BaseModel):
     device_id: str      # Unique identifier of the sensor device
-    timestamp: str      # Time when the data was recorded
+    timestamp: Optional[str] = None      # Time when the data was recorded
     water_level: float  # Current water level measured by the sensor
     temperature: float  # Current temperature near the sensor
     flow_rate: float    # Current water flow rate measured by the sensor
