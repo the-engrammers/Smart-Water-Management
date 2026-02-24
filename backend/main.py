@@ -1,9 +1,13 @@
 # Import FastAPI framework to create the web server and API endpoints
 from fastapi import FastAPI
 
-# Import BaseModel from Pydantic to define and validate the data structure
-from pydantic import BaseModel
+# Import BaseModel and Field for strict validation
+from pydantic import BaseModel, Field
+
+# Import datetime for timestamp handling
 from datetime import datetime
+
+# Optional allows some fields to be not required
 from typing import Optional
 
 try:
@@ -12,41 +16,50 @@ except ImportError:
     from alert_service import send_discord_alert
 
 
+# Threshold used to detect abnormal flow rate
 LEAK_FLOW_RATE_THRESHOLD = 40.0
 
 
-# Create an instance of FastAPI
-# This object is the main entry point of the application
+# Create FastAPI application instance
 app = FastAPI()
 
 
-# Define the data model (Data Contract) for incoming sensor data
-# This ensures the incoming JSON has the correct structure and types
+# ===============================
+# Data Model (Strict Validation)
+# ===============================
 class SensorData(BaseModel):
-    device_id: str      # Unique identifier of the sensor device
-    timestamp: Optional[str] = None      # Time when the data was recorded
-    water_level: float  # Current water level measured by the sensor
-    temperature: float  # Current temperature near the sensor
-    flow_rate: float    # Current water flow rate measured by the sensor
+    # Prevent empty device_id
+    device_id: str = Field(..., min_length=1)
+
+    # Optional timestamp (must be valid datetime if provided)
+    timestamp: Optional[datetime] = None
+
+    # Water level cannot be negative
+    water_level: float = Field(..., ge=0)
+
+    # Temperature required (can add limits later if needed)
+    temperature: float
+
+    # Flow rate must be strictly positive
+    flow_rate: float = Field(..., gt=0)
+
+    # Optional status
     status: Optional[str] = None
 
 
-# Health check endpoint
-# This endpoint is used to verify that the server is running correctly
-# It can be accessed via GET request at /health
+# ===============================
+# Health Check Endpoint
+# ===============================
 @app.get("/health")
 def health_check():
-    # Return a simple status message
     return {"status": "Server running"}
 
 
-# Data ingestion endpoint
-# This endpoint receives sensor data via POST request at /ingest
-# FastAPI automatically validates the incoming JSON using SensorData model
+# ===============================
+# Data Ingestion Endpoint
+# ===============================
 @app.post("/ingest")
 def ingest(data: SensorData):
-    
-    # Print the received data to the console (for debugging and monitoring)
     print(data)
 
     leak_by_status = (data.status or "").strip().lower() == "leak"
@@ -61,9 +74,17 @@ def ingest(data: SensorData):
             "water_level": data.water_level,
             "temperature": data.temperature,
             "status": "Leak",
-            "timestamp": data.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": (data.timestamp or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
         }
-        alert_sent = send_discord_alert(alert_payload)
 
-    # Return a confirmation response to the sender
-    return {"message": "Data received", "alert_sent": alert_sent, "leak_detected": leak_detected}
+        try:
+            alert_sent = send_discord_alert(alert_payload)
+        except Exception as e:
+            print("Error sending alert:", e)
+            alert_sent = False
+
+    return {
+        "message": "Data received",
+        "alert_sent": alert_sent,
+        "leak_detected": leak_detected
+    }
