@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import time
+from pathlib import Path
 
 # 1. Configuration & Branding
 st.set_page_config(page_title="Engrammers | Live Water Monitor", layout="wide")
@@ -20,7 +21,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 2. Data Loading Logic
-LOG_FILE = "alert_logs.csv"
+LOG_FILE = Path(__file__).resolve().parent / "alert_logs.csv"
 
 def load_data():
     if os.path.exists(LOG_FILE):

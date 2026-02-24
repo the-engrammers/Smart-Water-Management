@@ -2,4 +2,10 @@ fastapi
 uvicorn
 pydantic
 requests
+streamlit
+pandas
+numpy
+scikit-learn
+joblib
+tensorflow
 
