@@ -1,83 +1,124 @@
-"""
-Water Demand Forecasting - LSTM Model
-
-This module contains a function to train a water demand
-forecasting model using historical data.
-
-The model uses the last 12 hours to predict
-the next hour's water flow rate.
-"""
-
 import pandas as pd
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from sklearn.preprocessing import MinMaxScaler
 import joblib
+import os
+import matplotlib.pyplot as plt
 
+# -------------------------------
+# Automatic relative data path
+# -------------------------------
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))
+    )
+)
 
-def train_model(data_path):
-    """
-    Train LSTM model using cleaned dataset.
+DATA_PATH = os.path.join(BASE_DIR, "data", "Aquifer_Petrignano.csv")
 
-    Parameters:
-        data_path (str): path to CSV file
+# -------------------------------
+# Helper function to create sequences
+# -------------------------------
+def create_sequences(data, window_size=12):
+    X, y = [], []
+    for i in range(len(data) - window_size):
+        X.append(data[i:i+window_size])
+        y.append(data[i+window_size][0])
+    return np.array(X), np.array(y)
 
-    Returns:
-        model: trained keras model
-    """
-
-    # Load dataset
+# -------------------------------
+# Main training function
+# -------------------------------
+def train_lstm_model(
+    data_path=DATA_PATH,
+    model_dir="models",
+    epochs=20,
+    batch_size=32,
+    target_column="Depth_to_Groundwater_P24",
+    temp_column="Temperature_Petrignano"
+):
+    # Load data
     df = pd.read_csv(data_path)
 
-    # Convert timestamp column
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
+    df["hour"] = 0
+    df["day_of_week"] = df["Date"].dt.dayofweek
 
-    # Create time features
-    df["hour"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    features = [target_column, temp_column, "hour", "day_of_week"]
+    df[features] = df[features].ffill()
 
-    # Select relevant columns
-    features = ["flow_rate", "temperature", "hour", "day_of_week"]
-
-    # Scale data between 0 and 1
+    # Scale features
     scaler = MinMaxScaler()
-    scaled = scaler.fit_transform(df[features])
+    scaled_data = scaler.fit_transform(df[features])
 
-    # Save scaler for later use
-    joblib.dump(scaler, "scaler.pkl")
+    # Save scaler
+    os.makedirs(model_dir, exist_ok=True)
+    joblib.dump(scaler, os.path.join(model_dir, "scaler.pkl"))
 
-    # Create sequences (12-hour window)
-    X = []
-    y = []
-    window_size = 12
+    # Create sequences
+    X, y = create_sequences(scaled_data, window_size=12)
 
-    for i in range(len(scaled) - window_size):
-        X.append(scaled[i:i + window_size])
-        y.append(scaled[i + window_size][0])
-
-    X = np.array(X)
-    y = np.array(y)
-
-    # Build model
+    # Build LSTM
     model = Sequential()
-    model.add(LSTM(64, input_shape=(window_size, len(features))))
+    model.add(LSTM(64, input_shape=(X.shape[1], X.shape[2])))
     model.add(Dense(32, activation="relu"))
     model.add(Dense(1))
-
     model.compile(optimizer="adam", loss="mse")
 
-    # Train model
-    model.fit(X, y, epochs=20, batch_size=32)
+    # Train
+    history = model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=1)
 
-    # Save trained model
-    model.save("model.h5")
+    # Save model
+    model.save(os.path.join(model_dir, "water_forecast_model.h5"))
 
-    print("Training complete. Model saved as model.h5")
+    # -------------------------------
+    # Plot training loss
+    # -------------------------------
+    plt.figure(figsize=(8,4))
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.title('LSTM Training Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('MSE')
+    plt.legend()
+    plt.show()
 
-    return model
+    # -------------------------------
+    # Plot predictions vs true values
+    # -------------------------------
+    y_pred = model.predict(X)
+
+    plt.figure(figsize=(12,4))
+    plt.plot(y[:100], label='True')
+    plt.plot(y_pred[:100], label='Predicted')
+    plt.title('Groundwater Depth Predictions (First 100 points)')
+    plt.xlabel('Time step')
+    plt.ylabel('Scaled Depth')
+    plt.legend()
+    plt.show()
+
+    # -------------------------------
+    # Predict next hour groundwater depth
+    # -------------------------------
+    last_sequence = scaled_data[-12:]
+    last_sequence_input = np.expand_dims(last_sequence, axis=0)
+
+    next_pred_scaled = model.predict(last_sequence_input)
+
+    last_features = last_sequence[-1, 1:].reshape(1, -1)
+
+    next_pred_scaled_full = np.concatenate([next_pred_scaled, last_features], axis=1)
+
+    next_pred = scaler.inverse_transform(next_pred_scaled_full)[0][0]
+
+    print(f"✅ Predicted groundwater depth for next hour: {next_pred:.2f}")
+
+    return model, scaler, X, y
 
 
+# -------------------------------
+# Run
+# -------------------------------
 if __name__ == "__main__":
-    print("This script expects a cleaned dataset.")
-    print("Call train_model('your_cleaned_data.csv') to train.")
+    train_lstm_model()
