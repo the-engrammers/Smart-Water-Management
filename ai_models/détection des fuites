@@ -1,0 +1,148 @@
+import pandas as pd
+import numpy as np
+import json
+import joblib
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+
+# ==========================================
+# 1. Load Kaggle Water Dataset
+# ==========================================
+
+data = pd.read_csv(r"C:\Users\pc\Downloads\Aquifer_Petrignano.csv")
+
+# Supprimer Date si présente
+if "Date" in data.columns:
+    data = data.drop(columns=["Date"])
+
+# Supprimer valeurs manquantes
+data = data.dropna()
+
+# ==========================================
+# 2. Create Artificial Leakage Label
+# (si dataset n'a pas de Leak flag)
+# ==========================================
+
+# Ici on simule anomalies extrêmes comme fuite
+threshold = data["Volume_C10_Petrignano"].quantile(0.95)
+
+data["Leakage_Flag"] = np.where(
+    data["Volume_C10_Petrignano"] > threshold, 1, 0
+)
+
+# ==========================================
+# 3. Features & Target
+# ==========================================
+
+X = data.drop(columns=["Leakage_Flag"])
+y = data["Leakage_Flag"]
+
+# ==========================================
+# 4. Scaling
+# ==========================================
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# ==========================================
+# 5. Train/Test Split
+# ==========================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42
+)
+
+# ==========================================
+# 6. Train Isolation Forest
+# ==========================================
+
+model = IsolationForest(
+    n_estimators=200,
+    contamination=0.05,
+    random_state=42
+)
+
+# Entraîner uniquement sur données normales
+model.fit(X_train[y_train == 0])
+
+# ==========================================
+# 7. Evaluation
+# ==========================================
+
+y_pred = model.predict(X_test)
+
+# Convertir : -1 → 1 (Leak), 1 → 0 (Normal)
+y_pred = np.where(y_pred == -1, 1, 0)
+
+accuracy = accuracy_score(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print(classification_report(y_test, y_pred))
+
+# ==========================================
+# 8. Save Model
+# ==========================================
+
+joblib.dump(model, "leak_detection_model.pkl")
+joblib.dump(scaler, "scaler.pkl")
+
+print("Model saved successfully.")
+
+# ==========================================
+# 9. Predict Function (JSON Input)
+# ==========================================
+
+def predict_leak(json_input):
+
+    model = joblib.load("leak_detection_model.pkl")
+    scaler = joblib.load("scaler.pkl")
+
+    data_dict = json.loads(json_input)
+
+    input_data = np.array([[
+        data_dict["Rainfall_Bastia_Umbra"],
+        data_dict["Depth_to_Groundwater_P24"],
+        data_dict["Depth_to_Groundwater_P25"],
+        data_dict["Temperature_Bastia_Umbra"],
+        data_dict["Temperature_Petrignano"],
+        data_dict["Volume_C10_Petrignano"],
+        data_dict["Hydrometry_Fiume_Chiascio_Petrignano"]
+    ]])
+
+    input_scaled = scaler.transform(input_data)
+
+    score = model.decision_function(input_scaled)[0]
+
+    # Normalisation du score en probabilité
+    leak_probability = 1 / (1 + np.exp(score))
+
+    prediction = model.predict(input_scaled)[0]
+
+    if prediction == -1:
+        leak_flag = "Leak"
+    else:
+        leak_flag = "No Leak"
+
+    return {
+        "leak_probability": float(leak_probability),
+        "prediction": leak_flag
+    }
+
+# ==========================================
+# 10. Example Test
+# ==========================================
+
+sample_json = json.dumps({
+    "Rainfall_Bastia_Umbra": 10,
+    "Depth_to_Groundwater_P24": -20,
+    "Depth_to_Groundwater_P25": -18,
+    "Temperature_Bastia_Umbra": 15,
+    "Temperature_Petrignano": 16,
+    "Volume_C10_Petrignano": 150000,
+    "Hydrometry_Fiume_Chiascio_Petrignano": 3
+})
+
+result = predict_leak(sample_json)
+print(result)
