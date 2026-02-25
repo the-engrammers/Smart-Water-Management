@@ -1,7 +1,25 @@
-# lstm_for_or.py
-# --------------------------------------------------
-# LSTM Forecast Module for OR Integration
-# --------------------------------------------------
+"""
+LSTM Forecast Module for OR Integration
+
+This module provides a function `forecast_for_or` that predicts the next 24 hours of groundwater depth
+using a trained LSTM model and a pre-fitted scaler.
+
+Key updates in this version:
+1. Fixed H5 model loading: `compile=False` avoids errors with Keras metrics during load.
+2. Rolling window fixed: ensured shapes are compatible for NumPy concatenation and updates.
+3. Model and scaler paths updated to point to the root-level `models/` folder.
+4. Fully ready to integrate with Operations Research (OR) modules.
+
+Usage:
+    from lstm_for_or import forecast_for_or
+    forecast = forecast_for_or(steps=24)
+    print(forecast)
+
+This helps partners understand:
+- Which problems were fixed.
+- How to use the function.
+- That the module now produces consistent forecasts for OR integration.
+"""
 
 import numpy as np
 import pandas as pd
