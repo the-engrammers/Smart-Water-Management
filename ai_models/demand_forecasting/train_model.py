@@ -7,9 +7,9 @@ import joblib
 import os
 import matplotlib.pyplot as plt
 
-# -------------------------------
+
 # Automatic relative data path
-# -------------------------------
+
 BASE_DIR = os.path.dirname(
     os.path.dirname(
         os.path.dirname(os.path.abspath(__file__))
@@ -18,9 +18,9 @@ BASE_DIR = os.path.dirname(
 
 DATA_PATH = os.path.join(BASE_DIR, "data", "Aquifer_Petrignano.csv")
 
-# -------------------------------
+
 # Helper function to create sequences
-# -------------------------------
+
 def create_sequences(data, window_size=12):
     X, y = [], []
     for i in range(len(data) - window_size):
@@ -84,9 +84,9 @@ def train_lstm_model(
     plt.legend()
     plt.show()
 
-    # -------------------------------
+   
     # Plot predictions vs true values
-    # -------------------------------
+  
     y_pred = model.predict(X)
 
     plt.figure(figsize=(12,4))
