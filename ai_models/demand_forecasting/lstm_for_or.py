@@ -13,16 +13,12 @@ import os
 # -------------------------------
 # Automatic base directory
 # -------------------------------
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))
-    )
-)
-
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_PATH = os.path.join(BASE_DIR, "data", "Aquifer_Petrignano.csv")
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "water_forecast_model.h5")
-SCALER_PATH = os.path.join(os.path.dirname(__file__), "models", "scaler.pkl")
 
+# Models are in the root-level 'models/' folder
+MODEL_PATH = os.path.join(BASE_DIR, "models", "water_forecast_model.h5")
+SCALER_PATH = os.path.join(BASE_DIR, "models", "scaler.pkl")
 
 # --------------------------------------------------
 # Forecast Function for OR
@@ -34,7 +30,7 @@ def forecast_for_or(
 ):
 
     # Load trained model and scaler
-    model = load_model(MODEL_PATH)
+    model = load_model(MODEL_PATH, compile=False)  # compile=False fixes H5 load issue
     scaler = joblib.load(SCALER_PATH)
 
     # Load data
@@ -57,16 +53,17 @@ def forecast_for_or(
         input_seq = np.expand_dims(last_sequence, axis=0)
         next_pred_scaled = model.predict(input_seq, verbose=0)[0][0]
 
-        # prepare full row for inverse scaling
-        last_features = last_sequence[-1, 1:].reshape(1, -1)
-        next_full_scaled = np.concatenate([[next_pred_scaled], last_features], axis=1)
+        # --- FIXED SHAPE ISSUE ---
+        last_features = last_sequence[-1, 1:].reshape(1, -1)          # shape (1, n-1)
+        next_pred_scaled_2d = np.array([[next_pred_scaled]])          # shape (1,1)
+        next_full_scaled = np.concatenate([next_pred_scaled_2d, last_features], axis=1)
 
         # inverse scaling
         next_pred = scaler.inverse_transform(next_full_scaled)[0][0]
         predictions.append(next_pred)
 
-        # update rolling window
-        next_row_scaled = np.array([next_pred_scaled] + list(last_sequence[-1, 1:]))
+        # update rolling window (FIXED)
+        next_row_scaled = np.hstack([next_pred_scaled_2d, last_sequence[-1, 1:].reshape(1, -1)])
         last_sequence = np.vstack([last_sequence[1:], next_row_scaled])
 
     # Build OR-ready DataFrame
@@ -78,7 +75,6 @@ def forecast_for_or(
     })
 
     return forecast_df
-
 
 # --------------------------------------------------
 # Run test
