@@ -1,7 +1,6 @@
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-alert_logs.csv
-frontend/alert_logs.csv
+venv/
+__pycache__/git add ai_models/demand_forecasting/train_model.py
+git add ai_models/demand_forecasting/lstm_for_or.py
+git add .gitignore
+*.pyc
+.ipynb_checkpoints/
