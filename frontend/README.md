@@ -14,3 +14,8 @@
 	streamlit run frontend/app.py
 	```
 
+ 3. Make the backend joinable:
+    ```bash
+	uvicorn backend.main:app
+	```
+
