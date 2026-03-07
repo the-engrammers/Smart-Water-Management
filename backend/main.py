@@ -15,6 +15,8 @@ try:
 except ImportError:
     from alert_service import send_discord_alert
 
+from control_service import control_pump, control_valve, get_history
+from decision_engine import SensorData as DecisionSensorData, make_irrigation_decision
 
 # Threshold used to detect abnormal flow rate
 LEAK_FLOW_RATE_THRESHOLD = 40.0
@@ -88,3 +90,75 @@ def ingest(data: SensorData):
         "alert_sent": alert_sent,
         "leak_detected": leak_detected
     }
+
+
+# ===============================
+# Control Endpoints
+# ===============================
+
+class PumpCommand(BaseModel):
+    """Schema for pump requests; expects a JSON object like {"command": "START"}"""
+    command: str
+
+
+class ValveCommand(BaseModel):
+    """Schema for valve requests; expects a JSON object like {"command": "OPEN"}"""
+    command: str
+
+class IrrigationInput(BaseModel):
+    soil_moisture: float
+    temperature: float
+    humidity: float
+    rainfall_forecast: float
+    crop_type: str
+
+@app.post("/control/pump")
+def pump_control(data: PumpCommand):
+    """
+    POST Endpoint: Receives a command for the pump.
+    Passes the 'command' string to the control_pump logic function.
+    """
+    return control_pump(data.command)
+
+
+@app.post("/control/valve")
+def valve_control(data: ValveCommand):
+    """
+    POST Endpoint: Receives a command for the valve.
+    Passes the 'command' string to the control_valve logic function.
+    """
+    return control_valve(data.command)
+
+
+@app.get("/control/history")
+def history():
+    """
+    GET Endpoint: Returns the full JSON history of all commands executed.
+    Useful for monitoring the system state from a web browser or dashboard.
+    """
+    return get_history()
+
+
+@app.post("/smart-irrigation")
+def smart_irrigation(data: IrrigationInput):
+    """
+    Intelligent irrigation endpoint.
+    Uses rule engine to decide action,
+    then triggers hardware automatically.
+    """
+
+    # Convert API input into decision engine object
+    sensor = DecisionSensorData(**data.dict())
+
+    # Get decision
+    decision = make_irrigation_decision(sensor)
+
+    # Execute hardware control automatically
+    if decision["action"] == "START_IRRIGATION":
+        control_pump("START")
+        control_valve("OPEN")
+    else:
+        control_pump("STOP")
+        control_valve("CLOSE")
+
+    return decision
