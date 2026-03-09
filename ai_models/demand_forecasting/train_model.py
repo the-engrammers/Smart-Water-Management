@@ -122,3 +122,8 @@ def train_lstm_model(
 # -------------------------------
 if __name__ == "__main__":
     train_lstm_model()
+    def predict_demand(model, data):
+    data = np.array(data).reshape(1, -1, 1)
+    prediction = model.predict(data)
+
+    return {"next_hour_demand": float(prediction[0][0])}
