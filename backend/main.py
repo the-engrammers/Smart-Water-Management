@@ -162,3 +162,16 @@ def smart_irrigation(data: IrrigationInput):
         control_valve("CLOSE")
 
     return decision
+from fastapi import FastAPI
+import joblib
+
+app = FastAPI()
+
+leak_model = None
+demand_model = None
+
+@app.on_event("startup")
+def load_models():
+    global leak_model, demand_model
+    leak_model = joblib.load("ai_models/leak_detection_model.pkl")
+    demand_model = joblib.load("ai_models/demand_model.h5")
