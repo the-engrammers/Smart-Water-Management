@@ -5,12 +5,28 @@ from pathlib import Path
 
 import requests
 
+# ===============================
+# SECURITY: Load secret from ENV
+# ===============================
 
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "https://discordapp.com/api/webhooks/1474427883173707938/mChuz3klUQpeh869O_BVNdxaXn5BIYxxymPtdWARYe8bOY0rwiuaj8WAbBPs-dpd6oRZ")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE = ROOT_DIR / "frontend" / "alert_logs.csv"
-CSV_FIELDS = ["timestamp", "device_id", "flow_rate", "water_level", "temperature", "status"]
 
+CSV_FIELDS = [
+    "timestamp",
+    "device_id",
+    "flow_rate",
+    "water_level",
+    "temperature",
+    "status",
+]
+
+
+# ===============================
+# Ensure CSV schema
+# ===============================
 
 def ensure_log_schema() -> None:
     if not os.path.isfile(LOG_FILE):
@@ -19,13 +35,16 @@ def ensure_log_schema() -> None:
     with open(LOG_FILE, mode="r", newline="", encoding="utf-8") as file_handle:
         reader = csv.DictReader(file_handle)
         current_fields = reader.fieldnames or []
+
         if current_fields == CSV_FIELDS:
             return
+
         rows = list(reader)
 
     with open(LOG_FILE, mode="w", newline="", encoding="utf-8") as file_handle:
         writer = csv.DictWriter(file_handle, fieldnames=CSV_FIELDS)
         writer.writeheader()
+
         for row in rows:
             writer.writerow(
                 {
@@ -39,15 +58,25 @@ def ensure_log_schema() -> None:
             )
 
 
+# ===============================
+# Log alerts to CSV
+# ===============================
+
 def log_alert_to_csv(data):
+
     file_exists = os.path.isfile(LOG_FILE)
+
     Path(LOG_FILE).parent.mkdir(parents=True, exist_ok=True)
+
     ensure_log_schema()
 
     with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as file_handle:
+
         writer = csv.DictWriter(file_handle, fieldnames=CSV_FIELDS)
+
         if not file_exists:
             writer.writeheader()
+
         writer.writerow(
             {
                 "timestamp": data["timestamp"],
@@ -62,9 +91,14 @@ def log_alert_to_csv(data):
     print(f"Alert logged successfully to {LOG_FILE}")
 
 
+# ===============================
+# Send Discord Alert
+# ===============================
+
 def send_discord_alert(data):
+
     if not DISCORD_WEBHOOK_URL:
-        print("DISCORD_WEBHOOK_URL is not set. Alert not sent.")
+        print("⚠ DISCORD_WEBHOOK_URL not configured.")
         log_alert_to_csv(data)
         return False
 
@@ -77,8 +111,8 @@ def send_discord_alert(data):
                 "fields": [
                     {"name": "Device ID", "value": data["device_id"], "inline": True},
                     {"name": "Flow Rate", "value": f"{data['flow_rate']} L/min", "inline": True},
-                    {"name": "Water Level", "value": f"{data.get('water_level', 'N/A')} m", "inline": True},
-                    {"name": "Temperature", "value": f"{data.get('temperature', 'N/A')} °C", "inline": True},
+                    {"name": "Water Level", "value": f"{data.get('water_level','N/A')} m", "inline": True},
+                    {"name": "Temperature", "value": f"{data.get('temperature','N/A')} °C", "inline": True},
                     {"name": "Timestamp", "value": data["timestamp"], "inline": False},
                 ],
             }
@@ -86,21 +120,31 @@ def send_discord_alert(data):
     }
 
     try:
+
         response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+
         if response.status_code == 204:
-            print("Alert sent to Discord!")
+            print("✅ Alert sent to Discord")
             log_alert_to_csv(data)
             return True
-        print(f"Failed to send alert. Status: {response.status_code}")
-        log_alert_to_csv(data)
-        return False
-    except Exception as error:
-        print(f"Error: {error}")
+
+        print(f"❌ Failed to send alert. Status: {response.status_code}")
         log_alert_to_csv(data)
         return False
 
+    except Exception as error:
+
+        print(f"Error sending alert: {error}")
+        log_alert_to_csv(data)
+        return False
+
+
+# ===============================
+# Test
+# ===============================
 
 if __name__ == "__main__":
+
     test_data = {
         "device_id": "SN-MEKNES-001",
         "flow_rate": 45.2,
