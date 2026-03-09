@@ -1,4 +1,3 @@
-from fastapi import FastAPI
 from middleware import limiter
 # Import FastAPI framework to create the web server and API endpoints
 from fastapi import FastAPI
