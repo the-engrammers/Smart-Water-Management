@@ -26,7 +26,7 @@ LEAK_FLOW_RATE_THRESHOLD = 40.0
 # Create FastAPI application instance
 app = FastAPI()
 
-
+app.state.limiter = limiter
 # ===============================
 # Data Model (Strict Validation)
 # ===============================
