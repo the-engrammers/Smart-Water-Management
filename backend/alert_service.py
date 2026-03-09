@@ -2,8 +2,11 @@ import csv
 import os
 from datetime import datetime
 from pathlib import Path
-
 import requests
+import time
+from backend.notifications.notification_manager import NotificationManager
+from backend.notifications.severity import Severity
+from backend.notifications.alert_status import AlertStatus
 
 # ===============================
 # SECURITY: Load secret from ENV
@@ -14,15 +17,23 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE = ROOT_DIR / "frontend" / "alert_logs.csv"
 
+
 CSV_FIELDS = [
-    "timestamp",
-    "device_id",
-    "flow_rate",
-    "water_level",
-    "temperature",
-    "status",
+    'timestamp',
+    'device_id',
+    'flow_rate',
+    'water_level',
+    'temperature',
+    'status'
 ]
 
+# ===============================
+# Notification System Variables
+# ===============================
+user_prefs = {}  # Example: {user_id: {"sms": "+1234567890", "email": "user@example.com"}}
+notification_manager = NotificationManager(user_prefs)
+alert_cooldowns = {}  # {(user_id, alert_type): last_sent_time}
+alert_acknowledgments = {}  # {(user_id, alert_id): status}
 
 # ===============================
 # Ensure CSV schema
@@ -32,30 +43,25 @@ def ensure_log_schema() -> None:
     if not os.path.isfile(LOG_FILE):
         return
 
-    with open(LOG_FILE, mode="r", newline="", encoding="utf-8") as file_handle:
-        reader = csv.DictReader(file_handle)
-        current_fields = reader.fieldnames or []
 
-        if current_fields == CSV_FIELDS:
-            return
+def send_alert(user_id, alert_type, message, subject, severity=Severity.INFO, cooldown=300):
+    now = time.time()
+    cooldown_key = (user_id, alert_type)
+    if cooldown_key in alert_cooldowns and now - alert_cooldowns[cooldown_key] < cooldown:
+        return 'Cooldown active, alert not sent.'
+    result = notification_manager.send_alert(user_id, message, subject, severity)
+    alert_cooldowns[cooldown_key] = now
+    # Track alert status
+    alert_id = f"{user_id}_{alert_type}_{int(now)}"
+    alert_acknowledgments[(user_id, alert_id)] = AlertStatus.UNSEEN
+    return result
 
-        rows = list(reader)
+def acknowledge_alert(user_id, alert_id, status=AlertStatus.SEEN):
 
-    with open(LOG_FILE, mode="w", newline="", encoding="utf-8") as file_handle:
-        writer = csv.DictWriter(file_handle, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-
-        for row in rows:
-            writer.writerow(
-                {
-                    "timestamp": row.get("timestamp", ""),
-                    "device_id": row.get("device_id", ""),
-                    "flow_rate": row.get("flow_rate", ""),
-                    "water_level": row.get("water_level", ""),
-                    "temperature": row.get("temperature", ""),
-                    "status": row.get("status", ""),
-                }
-            )
+    if (user_id, alert_id) in alert_acknowledgments:
+        alert_acknowledgments[(user_id, alert_id)] = status
+        return True
+    return False
 
 
 # ===============================
