@@ -101,20 +101,7 @@ def predict_leak(json_input: str):
     }
 
 
-if __name__ == "__main__":
-    train_and_save_model()
 
-    sample_json = json.dumps(
-        {
-            "Rainfall_Bastia_Umbra": 10,
-            "Depth_to_Groundwater_P24": -20,
-            "Depth_to_Groundwater_P25": -18,
-            "Temperature_Bastia_Umbra": 15,
-            "Temperature_Petrignano": 16,
-            "Volume_C10_Petrignano": 150000,
-            "Hydrometry_Fiume_Chiascio_Petrignano": 3,
-        }
-    )
 
     result = predict_leak(sample_json)
     print(result)
