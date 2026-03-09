@@ -118,3 +118,13 @@ if __name__ == "__main__":
 
     result = predict_leak(sample_json)
     print(result)
+    import numpy as np
+
+def predict_leak(model, data):
+    data = np.array(data).reshape(1, -1)
+    prediction = model.predict(data)
+
+    if prediction[0] == -1:
+        return {"leak": True}
+    else:
+        return {"leak": False}
