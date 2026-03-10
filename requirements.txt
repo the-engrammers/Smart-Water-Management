@@ -10,3 +10,5 @@ numpy
 scikit-learn
 joblib
 tensorflow
+slowapi
+python-jose
