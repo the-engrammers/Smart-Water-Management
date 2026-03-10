@@ -1,1 +1,17 @@
+# Security Documentation
 
+## Authentication
+- IoT devices authenticate using API keys.
+- Dashboard users authenticate using JWT tokens.
+
+## Environment Variables
+Sensitive data is stored in environment variables:
+- DISCORD_WEBHOOK_URL
+- JWT_SECRET
+- DEVICE_API_KEY
+
+## Rate Limiting
+API endpoints are protected with rate limiting to prevent abuse.
+
+## HTTPS
+The API must be deployed behind HTTPS to ensure secure communication.
