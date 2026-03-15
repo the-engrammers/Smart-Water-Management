@@ -7,6 +7,9 @@ import time
 from backend.notifications.notification_manager import NotificationManager
 from backend.notifications.severity import Severity
 from backend.notifications.alert_status import AlertStatus
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from datetime import datetime
 
 # ===============================
 # SECURITY: Load secret from ENV
@@ -162,3 +165,23 @@ if __name__ == "__main__":
 
     if test_data["status"] == "Leak":
         send_discord_alert(test_data)
+
+
+def log_alert_to_db(db: Session, alert_data: dict):
+    """
+    Logs the alert details into the SQL database alerts table.
+    """
+    try:
+        query = text("""
+            INSERT INTO alerts (device_id, alert_type, message, timestamp) 
+            VALUES (:device_id, :type, :msg, :timestamp)
+        """)
+        db.execute(query, {
+            "device_id": alert_data["device_id"],
+            "type": "Leak Detection",
+            "msg": f"High flow rate detected: {alert_data['flow_rate']}",
+            "timestamp": alert_data["timestamp"]
+        })
+        db.commit()
+    except Exception as e:
+        print(f"Failed to log alert to DB: {e}")
