@@ -1,6 +1,8 @@
 # Import FastAPI framework to create the web server and API endpoints
 from fastapi import FastAPI
 
+from or_models.decision_engine import make_decision
+
 # Import BaseModel and Field for strict validation
 from pydantic import BaseModel, Field
 
@@ -88,3 +90,15 @@ def ingest(data: SensorData):
         "alert_sent": alert_sent,
         "leak_detected": leak_detected
     }
+# ===============================
+# Decision Endpoint (OR + AI)
+# ===============================
+@app.get("/decision")
+def decision():
+    # Simulate LSTM predicted water need
+    predicted_need = 50  # Replace with real LSTM output later
+
+    # Get OR decision
+    decision_result = make_decision(predicted_need)
+
+    return decision_result

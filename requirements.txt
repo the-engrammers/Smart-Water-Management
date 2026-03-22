@@ -8,4 +8,4 @@ numpy
 scikit-learn
 joblib
 tensorflow
-
+pulp
