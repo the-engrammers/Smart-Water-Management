@@ -9,16 +9,6 @@ import matplotlib.pyplot as plt
 
 
 # Automatic relative data path
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))
-    )
-)
-
-DATA_PATH = os.path.join(BASE_DIR, "data", "Aquifer_Petrignano.csv")
-
-
 # Helper function to create sequences
 
 def create_sequences(data, window_size=12):
